@@ -1,0 +1,83 @@
+# J.A.R.V.I.S. configuration — every service here is free.
+# Copy to jarvis.toml (git-ignored) and fill in your details:
+#   cp jarvis.example.toml jarvis.toml
+
+[me]
+name = "Tony"                 # your name
+address = "Your Majesty"      # how Jarvis addresses you ("sir", "madam", "boss"...)
+timezone = ""                 # IANA name, e.g. "Asia/Jakarta". Empty = system timezone.
+
+[location]                    # Weather: Open-Meteo (free, no key)
+city = "London"
+latitude = 0.0                # leave 0 to geocode the city automatically
+longitude = 0.0
+
+[llm]
+# The brain. Options (all free):
+#   "auto"     -> first that works: ollama, then openai-compatible (if api_key set), then claude CLI
+#   "ollama"   -> local model via Ollama (https://ollama.com), 100% free and offline
+#   "openai"   -> any OpenAI-compatible endpoint with a free tier: Groq, OpenRouter ":free" models, Google Gemini
+#   "claude"   -> Claude Code CLI (`claude -p`) if you already have it
+#   "none"     -> no AI; Jarvis uses built-in templates (still works!)
+provider = "auto"
+ollama_url = "http://localhost:11434"
+ollama_model = "llama3.2"
+# Free-tier presets for provider = "openai" (pick one, set api_key or env JARVIS_LLM_API_KEY):
+#   Groq:       base_url = "https://api.groq.com/openai/v1"                          model = "llama-3.3-70b-versatile"
+#   Gemini:     base_url = "https://generativelanguage.googleapis.com/v1beta/openai"  model = "gemini-2.5-flash"
+#   OpenRouter: base_url = "https://openrouter.ai/api/v1"                            model = "meta-llama/llama-3.3-70b-instruct:free"
+base_url = "https://api.groq.com/openai/v1"
+model = "llama-3.3-70b-versatile"
+api_key = ""
+timeout = 120
+
+[voice]
+# Text-to-speech (replaces paid Fish Audio):
+#   "edge"    -> edge-tts, free Microsoft neural voices (pip install edge-tts). Needs internet.
+#   "piper"   -> Piper, free offline neural TTS (https://github.com/rhasspy/piper)
+#   "browser" -> the browser's built-in speechSynthesis (zero install)
+engine = "edge"
+edge_voice = "en-GB-RyanNeural"   # British butler. Also try en-GB-ThomasNeural
+edge_rate = "-4%"
+edge_pitch = "-6Hz"
+piper_model = ""                  # path to e.g. en_GB-alan-medium.onnx
+# Speech-to-text: the dashboard uses the browser's free Web Speech API (Chrome/Edge).
+# For other browsers, `pip install faster-whisper` and Jarvis transcribes locally.
+whisper_model = "base.en"
+
+[calendar]
+# Any calendar that exposes an iCal (.ics) link — free, no OAuth.
+# Google Calendar: Settings -> your calendar -> "Secret address in iCal format".
+# Outlook: Settings -> Shared calendars -> Publish. Apple iCloud: Share -> Public Calendar.
+ics_urls = []
+
+[email]
+# IMAP, read-only scan. Gmail: enable 2FA, then create an App Password at
+# https://myaccount.google.com/apppasswords. Jarvis NEVER sends — at most it saves drafts.
+enabled = false
+imap_host = "imap.gmail.com"
+imap_port = 993
+username = ""
+password = ""                     # or env JARVIS_EMAIL_PASSWORD
+lookback_hours = 24
+max_messages = 30
+save_drafts = false               # true = put suggested replies in your Drafts folder (never sent)
+drafts_folder = "[Gmail]/Drafts"
+
+[tasks]
+# A plain markdown checklist (works great inside an Obsidian vault).
+file = "tasks.md"
+
+[news]
+# Free RSS feeds for the ticker.
+feeds = [
+  "https://feeds.bbci.co.uk/news/technology/rss.xml",
+  "https://hnrss.org/frontpage?points=200",
+]
+items_per_feed = 3
+
+[output]
+brief_txt = "brief.txt"
+data_js = "jarvis_data.js"
+audio = "jarvis_brief.mp3"
+archive_dir = "briefs"            # one markdown file per day (your free "Notion")

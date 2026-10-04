@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#020914">
+<meta name="description" content="J.A.R.V.I.S. — a free, self-hosted personal assistant dashboard with a voice.">
+<title>J.A.R.V.I.S.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020914;
+    --bg-2: #04142a;
+    --cyan: #3fe0ff;
+    --cyan-soft: rgba(63, 224, 255, .62);
+    --cyan-faint: rgba(63, 224, 255, .18);
+    --line: rgba(63, 224, 255, .28);
+    --panel: rgba(3, 16, 32, .52);
+    --text: #c9f6ff;
+    --muted: #6fa9bd;
+    --amber: #ffb02e;
+    --green: #3dffa8;
+    --red: #ff5a6e;
+    --display: "Orbitron", "Share Tech Mono", system-ui, sans-serif;
+    --mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 45%, var(--bg-2) 0%, var(--bg) 62%, #01040a 100%) fixed;
+    color: var(--text);
+    font: 13px/1.5 var(--mono);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas#core { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .fx { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .scan {
+    background: repeating-linear-gradient(to bottom, rgba(120, 230, 255, .035) 0 1px, transparent 1px 3px);
+    mix-blend-mode: screen;
+    animation: flicker 6s infinite steps(1);
+  }
+  .scan::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 18vh; top: -20vh;
+    background: linear-gradient(to bottom, transparent, rgba(63, 224, 255, .05), transparent);
+    animation: sweep 7s linear infinite;
+  }
+  .vignette { background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .78) 100%); }
+  @keyframes sweep { to { top: 110vh; } }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 47% { opacity: .85; } 48% { opacity: 1; } }
+
+  .hud {
+    position: relative; z-index: 2; height: 100vh; padding: 22px 26px 0;
+    display: grid; gap: 14px 22px;
+    grid-template-columns: minmax(250px, 23vw) minmax(0, 1fr) minmax(250px, 23vw);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "tl center tr" "left center right" "figs figs figs" "bar bar bar";
+  }
+  .tl { grid-area: tl; }
+  .tr { grid-area: tr; text-align: right; }
+  .left { grid-area: left; }
+  .right { grid-area: right; }
+  .center { grid-area: center; position: relative; min-height: 300px; }
+  .figures { grid-area: figs; }
+  .bar { grid-area: bar; }
+
+  h1 {
+    font: 800 30px/1 var(--display); letter-spacing: .32em; color: #e8fdff;
+    text-shadow: 0 0 12px rgba(63, 224, 255, .8), 0 0 34px rgba(63, 224, 255, .35);
+  }
+  .sub { font: 400 10px/1.4 var(--display); letter-spacing: .28em; color: var(--cyan-soft); margin-top: 8px; text-transform: uppercase; }
+  .date { margin-top: 12px; color: var(--muted); letter-spacing: .12em; }
+  .greet { margin-top: 4px; color: var(--text); font-size: 15px; letter-spacing: .06em; }
+  .clock { font: 600 34px/1 var(--display); letter-spacing: .12em; color: #e8fdff; text-shadow: 0 0 14px rgba(63, 224, 255, .65); }
+  .clock small { font-size: 15px; color: var(--cyan-soft); margin-left: 4px; }
+  .connectors { list-style: none; margin-top: 12px; display: inline-grid; gap: 3px; text-align: left; }
+  .connectors li { display: flex; align-items: center; gap: 9px; letter-spacing: .14em; font-size: 11px; color: var(--muted); }
+  .connectors li b { color: var(--text); font-weight: 400; min-width: 82px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); flex: none; }
+  .dot.off { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: blink 1.1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  .panel {
+    position: relative; background: var(--panel); border: 1px solid var(--line);
+    padding: 12px 14px; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  }
+  .panel::before, .panel::after {
+    content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--cyan); opacity: .85;
+  }
+  .panel::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+  .panel::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+  .label {
+    font: 600 10px/1 var(--display); letter-spacing: .3em; color: var(--cyan); margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .label span { color: var(--muted); font: 400 10px var(--mono); letter-spacing: .1em; }
+  .stack { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .stack .panel { min-height: 0; overflow: hidden; }
+  .grow { flex: 1; display: flex; flex-direction: column; }
+
+  #log { list-style: none; font-size: 11.5px; overflow: hidden; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+  #log li { white-space: pre-wrap; word-break: break-word; color: var(--cyan-soft); padding: 1px 0; }
+  #log li::before { content: "› "; color: var(--cyan); }
+  #log li.you { color: #f2fbff; }
+  #log li.you::before { content: "◂ "; }
+  #log li.jarvis { color: var(--text); }
+  #log li.jarvis::before { content: "▸ "; }
+  #log li.warn { color: var(--amber); }
+  .caret::after { content: "▌"; animation: blink .8s infinite; color: var(--cyan); }
+
+  .rows { list-style: none; display: grid; gap: 6px; }
+  .rows li { display: grid; grid-template-columns: 62px 1fr; gap: 8px; font-size: 12px; }
+  .rows li time { color: var(--cyan); }
+  .rows li.conflict { color: var(--amber); }
+  .rows li.conflict time { color: var(--amber); }
+  .empty { color: var(--muted); font-size: 12px; }
+
+  .stat { margin-bottom: 11px; }
+  .stat:last-child { margin-bottom: 0; }
+  .stat .row { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .14em; color: var(--muted); }
+  .stat .row b { color: var(--text); font-weight: 400; }
+  .track { height: 4px; margin-top: 5px; background: rgba(63, 224, 255, .1); position: relative; overflow: hidden; }
+  .fill {
+    height: 100%; width: 0; background: linear-gradient(90deg, rgba(63, 224, 255, .35), var(--cyan));
+    box-shadow: 0 0 10px var(--cyan); transition: width 1.6s cubic-bezier(.2, .8, .2, 1);
+  }
+
+  .prio { list-style: none; counter-reset: p; display: grid; gap: 10px; }
+  .prio li { counter-increment: p; display: grid; grid-template-columns: 26px 1fr; font-size: 12.5px; }
+  .prio li::before { content: "0" counter(p); font: 600 13px var(--display); color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+  .prio small { display: block; color: var(--muted); font-size: 11px; }
+
+  .headline {
+    position: absolute; left: 50%; top: 4px; transform: translateX(-50%); width: min(92%, 560px);
+    text-align: center; font: 400 11px var(--display); letter-spacing: .32em; color: var(--cyan-soft); text-transform: uppercase;
+  }
+  .below {
+    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: min(96%, 620px);
+    display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  }
+  .state { font: 600 10px var(--display); letter-spacing: .5em; color: var(--cyan); text-shadow: 0 0 10px var(--cyan); white-space: nowrap; }
+  .exchange {
+    font-size: 14px; color: #eafcff; min-height: 21px; max-height: 6.4em; overflow: hidden;
+    background: rgba(2, 9, 20, .55); padding: 0 8px; text-shadow: 0 0 10px rgba(0, 0, 0, .9);
+  }
+  .exchange:empty { background: none; }
+  .exchange .heard { color: var(--muted); font-size: 12px; display: block; }
+
+  .figures { display: flex; align-items: flex-end; gap: 14px; }
+  .fig { flex: 1; border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
+  .fig b { display: block; font: 600 34px/1 var(--display); color: #e8fdff; text-shadow: 0 0 16px rgba(63, 224, 255, .6); }
+  .fig span { font-size: 10px; letter-spacing: .26em; color: var(--muted); }
+  .chip {
+    flex: 1.6; align-self: stretch; display: flex; flex-direction: column; justify-content: center;
+    border: 1px solid rgba(255, 176, 46, .55); background: rgba(255, 176, 46, .08); padding: 8px 14px;
+    box-shadow: 0 0 22px rgba(255, 176, 46, .14) inset; min-width: 0;
+  }
+  .chip span { font: 600 10px var(--display); letter-spacing: .3em; color: var(--amber); }
+  .chip p { color: #ffe2b0; font-size: 13px; margin-top: 3px; }
+  .chip[hidden] { display: none; }
+
+  .bar {
+    display: flex; align-items: center; gap: 12px; padding: 12px 0 16px;
+    border-top: 1px solid var(--line); margin-top: 2px;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .btn {
+    font: 600 12px var(--display); letter-spacing: .28em; padding: 12px 20px; white-space: nowrap;
+    border: 1px solid var(--cyan); color: #e8fdff; background: rgba(63, 224, 255, .08);
+    box-shadow: 0 0 18px rgba(63, 224, 255, .35), inset 0 0 14px rgba(63, 224, 255, .22);
+    text-shadow: 0 0 8px var(--cyan); transition: background .2s, box-shadow .2s;
+  }
+  .btn:hover { background: rgba(63, 224, 255, .18); box-shadow: 0 0 28px rgba(63, 224, 255, .55), inset 0 0 18px rgba(63, 224, 255, .3); }
+  .btn.on { animation: pulse 1s infinite; }
+  .btn.ghost { box-shadow: none; padding: 12px 14px; border-color: var(--line); color: var(--cyan-soft); text-shadow: none; }
+  .btn.ghost:hover { border-color: var(--cyan); color: #e8fdff; }
+  .btn[hidden] { display: none; }
+  @keyframes pulse { 50% { box-shadow: 0 0 34px rgba(63, 224, 255, .8), inset 0 0 22px rgba(63, 224, 255, .45); } }
+  .mic { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .mic svg { width: 18px; height: 18px; }
+  .mic.on { border-color: var(--green); box-shadow: 0 0 26px rgba(61, 255, 168, .6); }
+  form.ask { flex: 0 1 260px; min-width: 120px; }
+  form.ask input {
+    width: 100%; background: rgba(63, 224, 255, .05); border: 1px solid var(--line); color: var(--text);
+    font: 13px var(--mono); padding: 12px; outline: none; letter-spacing: .04em;
+  }
+  form.ask input:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(63, 224, 255, .3); }
+  form.ask input::placeholder { color: var(--muted); }
+  .ticker { flex: 1; overflow: hidden; white-space: nowrap; min-width: 0; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+  .ticker div { display: inline-block; padding-left: 100%; animation: tick 60s linear infinite; color: var(--cyan-soft); letter-spacing: .08em; }
+  .ticker i { color: var(--cyan); font-style: normal; margin: 0 14px; }
+  @keyframes tick { to { transform: translateX(-100%); } }
+  .closer { font: 600 11px var(--display); letter-spacing: .26em; color: var(--cyan); text-shadow: 0 0 10px var(--cyan); white-space: nowrap; }
+  :focus-visible { outline: 1px solid var(--cyan); outline-offset: 3px; }
+
+  @media (max-width: 1100px) {
+    .closer { display: none; }
+  }
+  @media (max-width: 900px) {
+    body { overflow-y: auto; overflow-x: hidden; }
+    .hud {
+      height: auto; min-height: 100vh; padding: 18px 16px 0;
+      grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
+      grid-template-areas: "tl" "tr" "center" "figs" "bar" "left" "right";
+    }
+    .tr { text-align: left; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .connectors { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 14px; }
+    .connectors { margin-top: 0; }
+    .center { height: 58vh; min-height: 340px; }
+    h1 { font-size: 24px; }
+    .clock { font-size: 26px; }
+    .figures { flex-wrap: wrap; }
+    .fig { flex: 1 1 40%; }
+    .fig b { font-size: 28px; }
+    .chip { flex: 1 1 100%; }
+    .bar { flex-wrap: wrap; position: sticky; bottom: 0; background: rgba(2, 9, 20, .92); z-index: 3; }
+    form.ask { flex: 1 1 100%; order: 3; }
+    .ticker { flex: 1 1 100%; order: 4; }
+    .stack { padding-bottom: 18px; }
+    #log { max-height: 220px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scan, .scan::after, .ticker div { animation: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="core" aria-hidden="true"></canvas>
+<div class="fx scan"></div>
+<div class="fx vignette"></div>
+
+<main class="hud">
+  <header class="tl">
+    <h1>J.A.R.V.I.S.</h1>
+    <div class="sub">Just A Rather Very Intelligent System</div>
+    <div class="date" id="date"></div>
+    <div class="greet" id="greet"></div>
+  </header>
+
+  <section class="tr" aria-label="Status">
+    <div class="clock" id="clock">--:--<small>--</small></div>
+    <ul class="connectors" id="connectors"></ul>
+  </section>
+
+  <section class="left stack">
+    <div class="panel grow">
+      <div class="label">ACTIVITY LOG <span id="sync">--:--</span></div>
+      <ul id="log" aria-live="polite"></ul>
+    </div>
+    <div class="panel">
+      <div class="label">TODAY</div>
+      <ul class="rows" id="schedule"></ul>
+    </div>
+  </section>
+
+  <section class="center" id="center">
+    <div class="headline" id="headline"></div>
+    <div class="below">
+      <div class="state" id="state">STANDING BY</div>
+      <div class="exchange" id="exchange" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="right stack">
+    <div class="panel">
+      <div class="label">SYSTEMS</div>
+      <div id="stats"></div>
+    </div>
+    <div class="panel" style="flex: none">
+      <div class="label">PRIORITIES</div>
+      <ol class="prio" id="priorities"></ol>
+    </div>
+    <div class="panel grow" id="inboxPanel">
+      <div class="label">INBOX <span>drafts only</span></div>
+      <ul class="rows" id="inbox"></ul>
+    </div>
+  </section>
+
+  <section class="figures" id="figures"></section>
+
+  <footer class="bar">
+    <button class="btn" id="briefBtn" type="button">BRIEF ME</button>
+    <button class="btn mic" id="micBtn" type="button" aria-label="Talk to Jarvis (space)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <form class="ask" id="askForm" autocomplete="off">
+      <input id="askInput" type="text" placeholder="Ask Jarvis…" aria-label="Ask Jarvis">
+    </form>
+    <button class="btn ghost" id="syncBtn" type="button" hidden>SYNC</button>
+    <div class="ticker" aria-hidden="true"><div id="ticker"></div></div>
+    <div class="closer" id="closer">WHAT SHOULD I HANDLE FIRST?</div>
+  </footer>
+</main>
+
+<audio id="briefAudio" preload="none"></audio>
+<audio id="replyAudio" preload="none"></audio>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const S = {
+    data: null, server: null, history: [],
+    speaking: false, listening: false, thinking: false,
+    level: 0, bump: 0, analyser: null, buf: null,
+  };
+
+  /* ------------------------------------------------------------------ data */
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src + (src.includes("?") ? "&" : "?") + "t=" + Date.now();
+      s.onload = () => { s.remove(); resolve(); };
+      s.onerror = () => { s.remove(); reject(new Error(src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function loadData() {
+    window.JARVIS_DATA = undefined;
+    try { await loadScript("jarvis_data.js"); } catch (e) { /* fall through */ }
+    if (!window.JARVIS_DATA) {
+      try { await loadScript("jarvis_data.sample.js"); } catch (e) { /* none */ }
+    }
+    return window.JARVIS_DATA || { connectors: [], spoken: ["Good day. I have no data yet."], ticker: [] };
+  }
+
+  async function checkServer() {
+    if (!location.protocol.startsWith("http")) return null;
+    try {
+      const ctl = new AbortController();
+      setTimeout(() => ctl.abort(), 2500);
+      const r = await fetch("api/status", { signal: ctl.signal, cache: "no-store" });
+      return r.ok ? await r.json() : null;
+    } catch (e) { return null; }
+  }
+
+  /* ------------------------------------------------------------------ render */
+  function render(d, fresh) {
+    S.data = d;
+    const address = d.address || "sir";
+    $("#greet").textContent = d.greeting || "Good day, " + address;
+    $("#headline").textContent = d.headline || "";
+    $("#closer").textContent = (d.closer || "What should I handle first?").toUpperCase();
+    if (d.generated) {
+      const g = new Date(d.generated);
+      $("#sync").textContent = isNaN(g) ? "" : "SYNC " + g.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    const conns = [...(d.connectors || [])];
+    conns.push(S.server
+      ? { name: "LOCAL LINK", online: true, detail: "server.py" }
+      : { name: "LOCAL LINK", online: false, detail: "demo mode" });
+    $("#connectors").innerHTML = conns.map((c) =>
+      `<li title="${esc(c.detail)}"><i class="dot ${c.online ? "" : "off"}"></i><b>${esc(c.name)}</b>${c.online ? "ONLINE" : "OFFLINE"}</li>`).join("");
+
+    $("#stats").innerHTML = (d.stats || []).map((s) =>
+      `<div class="stat"><div class="row">${esc(s.label)}<b>${esc(s.value)}</b></div><div class="track"><div class="fill" data-pct="${Math.min(100, (Number(s.value) || 0) / (Number(s.max) || 1) * 100)}"></div></div></div>`).join("");
+    requestAnimationFrame(() => requestAnimationFrame(() =>
+      document.querySelectorAll(".fill").forEach((f) => { f.style.width = f.dataset.pct + "%"; })));
+
+    $("#priorities").innerHTML = (d.priorities || []).map((p) =>
+      `<li><div>${esc(p.title)}<small>${esc(p.why)}</small></div></li>`).join("") || `<li class="empty"><div>Nothing pressing.</div></li>`;
+
+    $("#schedule").innerHTML = (d.schedule || []).slice(0, 7).map((e) =>
+      `<li class="${e.conflict ? "conflict" : ""}"><time>${esc(e.time)}</time><span>${esc(e.title)}${e.conflict ? " ⚠" : ""}</span></li>`).join("")
+      || `<li class="empty">Calendar clear.</li>`;
+
+    const inbox = d.inbox || [];
+    $("#inboxPanel").hidden = !inbox.length;
+    $("#inbox").innerHTML = inbox.slice(0, 3).map((m) =>
+      `<li><time>${m.group === "reply" ? "REPLY" : "FYI"}</time><span>${esc(m.from)} — ${esc(m.subject)}</span></li>`).join("");
+
+    const figs = (d.figures || []).map((f) =>
+      `<div class="fig"><b data-n="${esc(f.value)}">${esc(f.value)}</b><span>${esc(f.label)}</span></div>`).join("");
+    const alert = d.alert && d.alert.text
+      ? `<div class="chip" role="status"><span>◆ ${esc(d.alert.label || "ALERT")}</span><p>${esc(d.alert.text)}</p></div>` : "";
+    $("#figures").innerHTML = figs + alert;
+    if (!reduceMotion) countUp();
+
+    const items = (d.ticker || []).map(esc).join("<i>◆</i>");
+    const tk = $("#ticker");
+    tk.innerHTML = items;
+    tk.style.animationDuration = Math.max(30, (d.ticker || []).join("").length / 6) + "s";
+
+    if (fresh) (d.log || []).forEach((l) => log(l));
+  }
+
+  function countUp() {
+    document.querySelectorAll(".fig b").forEach((el) => {
+      const m = String(el.dataset.n).match(/^(-?\d+(?:\.\d+)?)(.*)$/);
+      if (!m) return;
+      const target = parseFloat(m[1]), suffix = m[2], t0 = performance.now();
+      const step = (now) => {
+        const k = Math.min(1, (now - t0) / 1400), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = (Number.isInteger(target) ? Math.round(target * e) : (target * e).toFixed(1)) + suffix;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  /* ------------------------------------------------------------------ activity log (typewriter) */
+  const logQ = [];
+  let logBusy = false;
+  function log(text, cls = "") {
+    logQ.push({ text: String(text), cls });
+    if (!logBusy) nextLog();
+  }
+  function nextLog() {
+    const item = logQ.shift();
+    if (!item) { logBusy = false; return; }
+    logBusy = true;
+    const ul = $("#log"), li = document.createElement("li");
+    li.className = item.cls + " caret";
+    ul.appendChild(li);
+    while (ul.children.length > 40) ul.firstChild.remove();
+    let i = 0;
+    const speed = reduceMotion ? 1000 : Math.max(1, Math.ceil(item.text.length / 45));
+    const tick = () => {
+      i = Math.min(item.text.length, i + speed);
+      li.textContent = item.text.slice(0, i);
+      if (i < item.text.length) setTimeout(tick, 16);
+      else { li.classList.remove("caret"); setTimeout(nextLog, logQ.length > 3 ? 60 : 280); }
+    };
+    tick();
+  }
+
+  /* ------------------------------------------------------------------ clock */
+  function clock() {
+    const now = new Date();
+    const hm = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    $("#clock").innerHTML = `${hm}<small>${String(now.getSeconds()).padStart(2, "0")}</small>`;
+    $("#date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" }).toUpperCase();
+  }
+
+  /* ------------------------------------------------------------------ voice out */
+  let actx = null;
+  function audioGraph(el) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+      if (!el._wired) {
+        const src = actx.createMediaElementSource(el);
+        const an = actx.createAnalyser();
+        an.fftSize = 512;
+        src.connect(an); an.connect(actx.destination);
+        el._wired = an;
+      }
+      S.analyser = el._wired;
+      S.buf = new Uint8Array(S.analyser.fftSize);
+    } catch (e) { S.analyser = null; }
+  }
+
+  function pickVoice() {
+    const vs = speechSynthesis.getVoices();
+    const want = [/Daniel/i, /Google UK English Male/i, /Ryan/i, /Thomas/i, /George/i, /Arthur/i, /Oliver/i, /en-GB/i];
+    for (const re of want) {
+      const v = vs.find((v) => re.test(v.name) || re.test(v.lang));
+      if (v) return v;
+    }
+    return vs.find((v) => /^en/i.test(v.lang)) || null;
+  }
+
+  function setState(txt) { $("#state").textContent = txt; }
+
+  function stopSpeaking() {
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    ["#briefAudio", "#replyAudio"].forEach((s) => { const a = $(s); a.pause(); });
+    speakingDone();
+  }
+  function speakingStart() {
+    S.speaking = true;
+    $("#briefBtn").textContent = "SPEAKING";
+    $("#briefBtn").classList.add("on");
+    setState("SPEAKING");
+  }
+  function speakingDone() {
+    S.speaking = false; S.analyser = null;
+    $("#briefBtn").textContent = "BRIEF ME";
+    $("#briefBtn").classList.remove("on");
+    setState(S.listening ? "LISTENING" : "STANDING BY");
+  }
+
+  function speakLines(lines) {
+    return new Promise((resolve) => {
+      if (!("speechSynthesis" in window)) { resolve(); return; }
+      speechSynthesis.cancel();
+      const voice = pickVoice();
+      const queue = lines.filter(Boolean);
+      speakingStart();
+      const next = () => {
+        const line = queue.shift();
+        if (!line || !S.speaking) { speakingDone(); resolve(); return; }
+        const u = new SpeechSynthesisUtterance(line);
+        if (voice) { u.voice = voice; u.lang = voice.lang; }
+        u.rate = 0.98; u.pitch = 0.9;
+        u.onboundary = () => { S.bump = 1; };
+        u.onend = next;
+        u.onerror = next;
+        speechSynthesis.speak(u);
+      };
+      next();
+    });
+  }
+
+  function playAudio(sel, url) {
+    return new Promise((resolve, reject) => {
+      const a = $(sel);
+      a.src = url;
+      a.onended = () => { speakingDone(); resolve(); };
+      a.onerror = () => reject(new Error("audio"));
+      audioGraph(a);
+      speakingStart();
+      a.play().catch(reject);
+    });
+  }
+
+  async function say(text, audioUrl) {
+    $("#exchange").innerHTML = esc(text);
+    log(text, "jarvis");
+    if (audioUrl) {
+      try { await playAudio("#replyAudio", audioUrl); return; } catch (e) { speakingDone(); }
+    }
+    await speakLines(splitSentences(text));
+  }
+
+  function splitSentences(text) {
+    return String(text).match(/[^.!?]+[.!?]*\s*/g) || [text];
+  }
+
+  async function brief() {
+    if (S.speaking) { stopSpeaking(); return; }
+    const d = S.data || {};
+    log("BRIEF    ▸ playing morning brief");
+    $("#exchange").innerHTML = esc(d.headline || "");
+    if (d.audio && S.server) {
+      try { await playAudio("#briefAudio", d.audio); return; } catch (e) { speakingDone(); }
+    }
+    await speakLines(d.spoken || [d.brief_text || "Nothing to report."]);
+  }
+
+  /* ------------------------------------------------------------------ voice in */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, recorder = null;
+
+  function listen() {
+    if (S.listening) { rec ? rec.stop() : recorder && recorder.stop(); return; }
+    if (S.speaking) stopSpeaking();
+    if (SR) {
+      rec = new SR();
+      rec.lang = navigator.language || "en-GB";
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      let finalText = "";
+      rec.onstart = () => listeningOn();
+      rec.onresult = (ev) => {
+        let interim = "";
+        for (const r of ev.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
+        $("#exchange").innerHTML = `<span class="heard">${esc(interim || finalText)}</span>`;
+      };
+      rec.onerror = (ev) => { if (ev.error !== "no-speech" && ev.error !== "aborted") log("MIC      ▸ " + ev.error, "warn"); };
+      rec.onend = () => { listeningOff(); rec = null; if (finalText.trim()) handle(finalText.trim()); };
+      rec.start();
+      return;
+    }
+    if (S.server && S.server.stt && navigator.mediaDevices && window.MediaRecorder) return recordForWhisper();
+    log("MIC      ▸ speech recognition unavailable here — type instead", "warn");
+    $("#askInput").focus();
+  }
+
+  async function recordForWhisper() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        listeningOff(); recorder = null;
+        const blob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
+        setState("TRANSCRIBING");
+        const r = await fetch("api/stt", { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+        const j = await r.json();
+        setState("STANDING BY");
+        if (j.text) handle(j.text);
+      };
+      recorder.start();
+      listeningOn();
+      setTimeout(() => recorder && recorder.state === "recording" && recorder.stop(), 15000);
+    } catch (e) { log("MIC      ▸ microphone blocked", "warn"); }
+  }
+
+  function listeningOn() { S.listening = true; $("#micBtn").classList.add("on"); setState("LISTENING"); }
+  function listeningOff() { S.listening = false; $("#micBtn").classList.remove("on"); if (!S.speaking && !S.thinking) setState("STANDING BY"); }
+
+  /* ------------------------------------------------------------------ the brain */
+  function localAnswer(q) {
+    const d = S.data || {}, A = d.address || "sir";
+    const t = q.toLowerCase();
+    const list = (arr) => arr.length < 2 ? arr.join("") : arr.slice(0, -1).join(", ") + " and " + arr[arr.length - 1];
+    if (/\btime\b/.test(t)) return `It's ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}, ${A}.`;
+    if (/\b(date|what day)\b/.test(t)) return `Today is ${new Date().toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}, ${A}.`;
+    if (/(priorit|handle first|focus|top three|to-?do|task)/.test(t)) {
+      const p = (d.priorities || []).map((x) => x.title);
+      return p.length ? `Your priorities: ${list(p)}. I'd start with ${p[0]}.` : `Nothing pressing on your list, ${A}.`;
+    }
+    if (/(schedule|calendar|meeting|agenda|event|next)/.test(t)) {
+      const s = d.schedule || [];
+      return s.length ? `You have ${s.length} item${s.length > 1 ? "s" : ""} today: ` + list(s.slice(0, 4).map((e) => `${e.title} at ${e.time}`)) + "."
+        : `Your calendar is clear, ${A}.`;
+    }
+    if (/(weather|temperature|rain|umbrella|cold|hot)/.test(t)) {
+      const w = d.weather;
+      return w ? `In ${w.city} it's ${w.temp} degrees and ${w.condition}, high of ${w.high}, ${w.rain} percent chance of rain.` + (w.rain >= 50 ? " I'd take an umbrella." : "")
+        : "I have no weather data, I'm afraid.";
+    }
+    if (/(mail|inbox|email|message)/.test(t)) {
+      const r = (d.inbox || []).filter((m) => m.group === "reply");
+      return r.length ? `${r.length} email${r.length > 1 ? "s" : ""} need a reply, starting with ${r[0].from} about ${r[0].subject}. Drafts are waiting for your approval.`
+        : `Nothing in the inbox needs you right now, ${A}.`;
+    }
+    if (/(who|what) are you/.test(t)) return `Just A Rather Very Intelligent System, ${A}. Built entirely from free tools.`;
+    if (/thank/.test(t)) return `Always a pleasure, ${A}.`;
+    if (/^(hey |hi |hello |ok |okay )?jarvis\b|^(hi|hello|hey)\b/.test(t)) return `At your service, ${A}.`;
+    if (/(stop|quiet|shut up|enough)/.test(t)) { stopSpeaking(); return null; }
+    return S.server
+      ? `My higher functions are offline, ${A}. Start Ollama or add a free API key in jarvis.toml and I'll answer properly.`
+      : `I'm running in demo mode, ${A}. Run server.py on your machine to give me a brain.`;
+  }
+
+  async function handle(text) {
+    $("#exchange").innerHTML = `<span class="heard">“${esc(text)}”</span>`;
+    log(text, "you");
+    const t = text.toLowerCase();
+    if (/\b(brief|morning report|catch me up)\b/.test(t) && !/(refresh|update|re-?run|regenerate)/.test(t)) return brief();
+
+    let reply = null, audio = null;
+    if (S.server && !/^(what('s| is) the )?(time|date)\b/.test(t)) {
+      S.thinking = true; setState("THINKING");
+      try {
+        const r = await fetch("api/ask", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, history: S.history.slice(-10) }),
+        });
+        const j = await r.json();
+        reply = j.reply; audio = j.audio;
+        if (j.action === "reload") render(await loadData(), true);
+      } catch (e) { log("BRAIN    ▸ unreachable", "warn"); }
+      S.thinking = false; setState("STANDING BY");
+    }
+    if (!reply) reply = localAnswer(text);
+    if (!reply) return;
+    S.history.push({ role: "user", content: text }, { role: "assistant", content: reply });
+    await say(reply, audio);
+  }
+
+  async function sync() {
+    const b = $("#syncBtn");
+    b.disabled = true; b.textContent = "SYNCING"; setState("SYNCING");
+    log("SYNC     ▸ re-running morning brief");
+    try {
+      const r = await fetch("api/brief", { method: "POST" });
+      if (!r.ok) throw new Error();
+      render(await loadData(), true);
+    } catch (e) { log("SYNC     ▸ failed", "warn"); }
+    b.disabled = false; b.textContent = "SYNC"; setState("STANDING BY");
+  }
+
+  /* ------------------------------------------------------------------ the core (canvas) */
+  const cv = $("#core"), ctx = cv.getContext("2d");
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    cv.style.width = W + "px"; cv.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  const N = 680, GA = Math.PI * (3 - Math.sqrt(5)), PTS = [];
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * GA;
+    PTS.push([Math.cos(th) * r, y, Math.sin(th) * r, Math.random() * Math.PI * 2]);
+  }
+
+  function speechLevel(t) {
+    if (S.analyser && S.buf) {
+      S.analyser.getByteTimeDomainData(S.buf);
+      let sum = 0;
+      for (let i = 0; i < S.buf.length; i++) { const v = (S.buf[i] - 128) / 128; sum += v * v; }
+      return Math.min(1, Math.sqrt(sum / S.buf.length) * 4.5);
+    }
+    // synthetic speech envelope (browser voices can't be analysed)
+    S.bump *= 0.9;
+    const syll = Math.abs(Math.sin(t * 11.3)) * (0.55 + 0.45 * Math.sin(t * 2.7));
+    return Math.min(1, 0.25 + 0.5 * syll + 0.4 * S.bump + 0.08 * Math.random());
+  }
+
+  const C = (a, rgb) => `rgba(${rgb},${a})`;
+  let spin = 0, last = performance.now();
+
+  function frame(now) {
+    const t = now / 1000, dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const rect = $("#center").getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2 - 6;
+    const R = Math.max(54, Math.min(190, Math.min(rect.width, rect.height) * 0.24));
+    const rgb = S.listening ? "90,255,200" : "63,224,255";
+    const target = S.speaking ? speechLevel(t) : S.listening ? 0.15 + 0.1 * Math.sin(t * 6) : 0;
+    S.level += (target - S.level) * (S.speaking ? 0.35 : 0.08);
+    const L = S.level;
+    spin += dt * (S.thinking ? 3.2 : S.listening ? 1.8 : 1) * (reduceMotion ? 0.2 : 1);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    // halo
+    const breath = 1 + 0.025 * Math.sin(t * 1.3) + L * 0.13;
+    let g = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.7);
+    g.addColorStop(0, C(0.20 + L * 0.25, rgb));
+    g.addColorStop(0.45, C(0.06 + L * 0.06, rgb));
+    g.addColorStop(1, C(0, rgb));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 2.7, 0, Math.PI * 2); ctx.fill();
+
+    // radial rays
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 96; i++) {
+      const a = (i / 96) * Math.PI * 2 + spin * 0.02;
+      const r1 = R * 1.16, r2 = R * (1.72 + 0.08 * Math.sin(i * 1.7 + t * 0.6) + L * 0.25 * Math.abs(Math.sin(i * 3.1 + t * 9)));
+      ctx.strokeStyle = C(0.045 + L * 0.12, rgb);
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); ctx.stroke();
+    }
+
+    // outer tick ring
+    const RT = R * 2.08;
+    for (let i = 0; i < 180; i++) {
+      const a = (i / 180) * Math.PI * 2 - spin * 0.05, big = i % 15 === 0;
+      const len = big ? R * 0.12 : R * 0.05;
+      ctx.strokeStyle = C(big ? 0.75 : 0.28, rgb);
+      ctx.lineWidth = big ? 1.6 : 1;
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * RT, cy + Math.sin(a) * RT); ctx.lineTo(cx + Math.cos(a) * (RT - len), cy + Math.sin(a) * (RT - len)); ctx.stroke();
+    }
+
+    // dashed HUD arcs at different speeds
+    const arcs = [[1.32, 0.35, [2, 6], 1.4, 2.2], [1.5, -0.22, [16, 8, 2, 8], 1.2, 1.5], [1.68, 0.12, [40, 10], 1, 1.1]];
+    for (const [k, speed, dash, w, span] of arcs) {
+      ctx.setLineDash(dash); ctx.lineWidth = w; ctx.strokeStyle = C(0.55 + L * 0.3, rgb);
+      const a0 = spin * speed;
+      ctx.beginPath(); ctx.arc(cx, cy, R * k, a0, a0 + span * Math.PI * 0.62); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, R * k, a0 + Math.PI, a0 + Math.PI + span * 0.35 * Math.PI); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // tilted orbital ring + marker
+    const tilt = -0.38, rx = R * 1.95, ry = R * 0.48, oa = spin * 0.75;
+    ctx.strokeStyle = C(0.3, rgb); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI * 2); ctx.stroke();
+    const mx = Math.cos(oa) * rx, my = Math.sin(oa) * ry;
+    const ox = cx + mx * Math.cos(tilt) - my * Math.sin(tilt), oy = cy + mx * Math.sin(tilt) + my * Math.cos(tilt);
+    const marker = () => {
+      const mg = ctx.createRadialGradient(ox, oy, 0, ox, oy, 12);
+      mg.addColorStop(0, "rgba(255,255,255,.95)"); mg.addColorStop(0.3, C(0.8, rgb)); mg.addColorStop(1, C(0, rgb));
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(ox, oy, 12, 0, Math.PI * 2); ctx.fill();
+    };
+    const front = Math.sin(oa) > 0;
+    if (!front) marker();
+
+    // the sphere: Fibonacci points, rotating, tilted
+    const ry_ = t * 0.22, tx = 0.42, cY = Math.cos(ry_), sY = Math.sin(ry_), cX = Math.cos(tx), sX = Math.sin(tx);
+    for (let i = 0; i < N; i++) {
+      const p = PTS[i];
+      const x1 = p[0] * cY - p[2] * sY, z1 = p[0] * sY + p[2] * cY;
+      const y2 = p[1] * cX - z1 * sX, z2 = p[1] * sX + z1 * cX;
+      const wob = 1 + L * 0.16 * Math.sin(p[3] + t * 13) + 0.012 * Math.sin(p[3] + t * 2);
+      const s = R * breath * wob * (1 + z2 * 0.08);
+      const depth = (z2 + 1) / 2;
+      const a = 0.12 + depth * 0.85;
+      const size = 0.5 + depth * 1.5 + L * 0.6;
+      ctx.fillStyle = depth > 0.82 ? `rgba(220,252,255,${a})` : C(a, rgb);
+      ctx.beginPath(); ctx.arc(cx + x1 * s, cy + y2 * s, size, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // pulsing core
+    const cr = R * (0.42 + 0.04 * Math.sin(t * 2.4) + L * 0.38);
+    g = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
+    g.addColorStop(0, "rgba(255,255,255,.95)");
+    g.addColorStop(0.18, C(0.85, rgb));
+    g.addColorStop(0.55, C(0.18 + L * 0.2, rgb));
+    g.addColorStop(1, C(0, rgb));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
+
+    if (front) marker();
+    ctx.restore();
+    requestAnimationFrame(frame);
+  }
+
+  /* ------------------------------------------------------------------ boot */
+  async function boot() {
+    resize();
+    addEventListener("resize", resize);
+    requestAnimationFrame(frame);
+    clock(); setInterval(clock, 1000);
+
+    log("BOOT     ▸ J.A.R.V.I.S. core online");
+    const [data, server] = await Promise.all([loadData(), checkServer()]);
+    S.server = server;
+    log(server ? `LINK     ▸ local server · brain ${server.brain_detail} · voice ${server.voice}`
+               : "LINK     ▸ demo mode · sample data · browser voice", server ? "" : "warn");
+    render(data, true);
+    $("#syncBtn").hidden = !server;
+
+    if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
+    $("#briefBtn").addEventListener("click", brief);
+    $("#micBtn").addEventListener("click", listen);
+    $("#syncBtn").addEventListener("click", sync);
+    $("#askForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const v = $("#askInput").value.trim();
+      $("#askInput").value = "";
+      if (v) handle(v);
+    });
+    addEventListener("keydown", (e) => {
+      if (e.code !== "Space" || e.repeat || /INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) return;
+      e.preventDefault();
+      listen();
+    });
+    if (server) setInterval(async () => render(await loadData(), false), 5 * 60 * 1000);
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Everything is optional — Jarvis runs on the Python standard library alone (3.11+).
+edge-tts>=6.1        # free British neural voice (recommended)
+# faster-whisper     # free local speech-to-text, for browsers without Web Speech (Firefox/Safari)

@@ -1,0 +1,13 @@
+# Personal data — never commit (this repo is public on GitHub Pages)
+jarvis.toml
+me.md
+tasks.md
+drafts.md
+brief.txt
+briefs/
+jarvis_data.js
+jarvis_brief.mp3
+jarvis_brief.wav
+.cache/
+__pycache__/
+.venv/
