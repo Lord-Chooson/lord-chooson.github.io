@@ -13,13 +13,16 @@ latitude = 0.0                # leave 0 to geocode the city automatically
 longitude = 0.0
 
 [llm]
-# The brain. Options (all free):
-#   "auto"     -> first that works: ollama, then openai-compatible (if api_key set), then claude CLI
-#   "ollama"   -> local model via Ollama (https://ollama.com), 100% free and offline
+# The brain. Options:
+#   "claude"   -> Claude, through the Claude Code CLI on the Claude plan you already have (no extra cost)
+#   "auto"     -> first that works: claude CLI, then ollama, then openai-compatible (if api_key set)
+#   "ollama"   -> local model via Ollama (https://ollama.com), free and offline
 #   "openai"   -> any OpenAI-compatible endpoint with a free tier: Groq, OpenRouter ":free" models, Google Gemini
-#   "claude"   -> Claude Code CLI (`claude -p`) if you already have it
 #   "none"     -> no AI; Jarvis uses built-in templates (still works!)
-provider = "auto"
+provider = "claude"
+claude_model = ""                 # empty = your plan's default. e.g. "sonnet" for speed, "opus" for depth
+use_subscription = true           # ignore ANTHROPIC_API_KEY so calls use your plan, not pay-per-use API credits
+# Fallbacks, only used when provider is "ollama", "openai", or "auto" without the claude CLI:
 ollama_url = "http://localhost:11434"
 ollama_model = "llama3.2"
 # Free-tier presets for provider = "openai" (pick one, set api_key or env JARVIS_LLM_API_KEY):

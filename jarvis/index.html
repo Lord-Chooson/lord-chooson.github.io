@@ -630,7 +630,7 @@
     if (/^(hey |hi |hello |ok |okay )?jarvis\b|^(hi|hello|hey)\b/.test(t)) return `At your service, ${A}.`;
     if (/(stop|quiet|shut up|enough)/.test(t)) { stopSpeaking(); return null; }
     return S.server
-      ? `My higher functions are offline, ${A}. Start Ollama or add a free API key in jarvis.toml and I'll answer properly.`
+      ? `My higher functions are offline, ${A}. Sign in to Claude Code with \`claude\` and I'll answer properly.`
       : `I'm running in demo mode, ${A}. Run server.py on your machine to give me a brain.`;
   }
 

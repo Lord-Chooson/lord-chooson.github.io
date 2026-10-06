@@ -1,16 +1,16 @@
 # J.A.R.V.I.S. — your own Jarvis, built only from free tools
 
 This is a rebuild of [Cindy Zhu's "Build your own Jarvis with Claude"](https://cindyzhu.com.au/guides/build-your-own-jarvis-with-claude)
-in which every paid piece has been swapped for a free one. Jarvis reads you a morning brief in a British butler
+using the Claude plan you already have as the brain, and free tools for everything else — no new subscriptions. Jarvis reads you a morning brief in a British butler
 voice, shows your day on a cinematic Iron Man dashboard, and you can talk to it.
 
 **Live demo (sample data, browser voice):** https://lord-chooson.github.io/jarvis/
 
 ## What changed: paid → free
 
-| Part of Jarvis | Original guide | Free replacement used here |
+| Part of Jarvis | Original guide | Used here |
 |---|---|---|
-| Brain | Claude Pro / Max ($20–100/mo) | **Ollama** running a local model (free, offline) — or a free API tier: **Groq**, **Google Gemini**, **OpenRouter `:free` models**. Claude Code still works if you already have it. With no model at all, a built-in template still writes the brief. |
+| Brain | Claude Pro / Max | **Claude, on the plan you already have**, through the Claude Code CLI (`claude -p`). No API key and no extra cost. If Claude is unavailable, Jarvis can fall back to Ollama, a free Groq/Gemini tier, or a built-in template. |
 | Voice out | Fish Audio (paid after the trial) | **edge-tts** — free Microsoft neural voices (`en-GB-RyanNeural`). Offline: **Piper**. Zero install: the browser's own voice. |
 | Voice in | Claude Code `/voice` | Browser **Web Speech API** (Chrome/Edge), or local **faster-whisper** for other browsers. |
 | Calendar | Google Calendar connector | Any calendar's **secret iCal (.ics) link**: Google, Outlook, iCloud. No OAuth. |
@@ -25,7 +25,8 @@ voice, shows your day on a cinematic Iron Man dashboard, and you can talk to it.
 
 ## Quick start (about 5 minutes)
 
-You need Python 3.11 or newer. Nothing else is required.
+You need Python 3.11 or newer and Claude Code signed in to your Claude account
+(`npm install -g @anthropic-ai/claude-code`, then run `claude` once and log in).
 
 ```bash
 git clone https://github.com/lord-chooson/lord-chooson.github.io
@@ -42,15 +43,18 @@ python3 server.py --brief            # then open http://localhost:8765
 Click **BRIEF ME** to hear the brief. Press the mic button (or **Space**) and talk to Jarvis, or type in **Ask Jarvis…**.
 **SYNC** runs the brief again.
 
-### 1. Give Jarvis a brain (pick one, all free)
+### 1. The brain: your Claude plan
 
-- **Ollama (recommended, private, offline):** install from https://ollama.com, then run `ollama pull llama3.2`.
-  Keep `provider = "auto"` and Jarvis finds it on its own.
-- **Groq free tier (fast):** create a key at https://console.groq.com/keys, then set `provider = "openai"` and `api_key`.
-- **Google Gemini free tier:** create a key at https://aistudio.google.com/apikey, then use the Gemini preset in `jarvis.toml`.
-- **Claude Code:** if you already have it, `provider = "claude"` works too.
+Nothing to set up beyond being signed in to Claude Code: `provider = "claude"` is the default. Jarvis calls
+`claude -p` for the brief and for every question, so it runs on your Pro/Max plan. Set `claude_model = "sonnet"`
+for faster spoken replies, or `"opus"` for a more thoughtful brief.
 
-You can also keep keys out of the file and use environment variables instead: `JARVIS_LLM_API_KEY` and `JARVIS_EMAIL_PASSWORD`.
+Jarvis removes `ANTHROPIC_API_KEY` from Claude's environment (`use_subscription = true`), so a leftover API key
+can't quietly switch you to pay-per-use billing.
+
+**Fallbacks (optional):** if you ever want Jarvis to work without Claude, set `provider = "auto"` and install
+Ollama (https://ollama.com, `ollama pull llama3.2`), or add a free Groq or Gemini key. You can keep keys and
+passwords out of the file with the `JARVIS_LLM_API_KEY` and `JARVIS_EMAIL_PASSWORD` environment variables.
 
 ### 2. Connect your calendar (free, no OAuth)
 
@@ -88,7 +92,7 @@ jarvis/
 ├── brief.py                morning brief: gather → compose → speak → write
 ├── server.py               localhost server: dashboard + /api/ask, /api/tts, /api/stt, /api/brief
 ├── connectors.py           iCal, IMAP, tasks.md, Open-Meteo, RSS
-├── llm.py                  Ollama / OpenAI-compatible free tiers / Claude CLI / none
+├── llm.py                  Claude CLI (default) / Ollama / OpenAI-compatible free tiers / none
 ├── voice.py                edge-tts / Piper / browser, plus optional faster-whisper
 ├── jarvis.example.toml     settings template
 ├── CLAUDE.md               Jarvis's personality and hard rules (imports me.md)
@@ -121,7 +125,7 @@ sub-agent for code work.
 
 | Symptom | Fix |
 |---|---|
-| `BRAIN offline templates` | Start Ollama (`ollama serve`), or set an API key, or set `provider` explicitly. |
+| `BRAIN offline templates` or replies are empty | Run `claude` in a terminal and make sure you're logged in, then try `claude -p "hello"`. |
 | `VOICE edge failed — browser fallback` | Run `pip install edge-tts` and check you're online, or use `engine = "piper"` to stay offline. |
 | Mic does nothing | Use Chrome or Edge at `http://localhost` (not `file://`), or `pip install faster-whisper`. |
 | `INBOX IMAP failed` | You need an App Password, not your normal password, and IMAP must be enabled in Gmail settings. |

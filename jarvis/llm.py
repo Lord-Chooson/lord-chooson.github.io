@@ -1,11 +1,12 @@
-"""The brain: one `chat()` over free LLM backends.
+"""The brain: one `chat()` over several LLM backends.
 
+claude  - Claude Code CLI (`claude -p`) on your existing Claude subscription (default)
 ollama  - local models, free and offline
 openai  - any OpenAI-compatible API with a free tier (Groq, Gemini, OpenRouter :free)
-claude  - Claude Code CLI (`claude -p`) if installed
 none    - no model; callers fall back to templates
 """
 import json
+import os
 import shutil
 import subprocess
 import urllib.error
@@ -36,15 +37,17 @@ def _ollama_up(lc):
 def provider(cfg):
     lc = cfg.get("llm", {})
     choice = lc.get("provider", "auto")
+    if choice == "claude" and not shutil.which("claude"):
+        choice = "auto"  # Claude Code not installed: use whatever fallback is available
     if choice != "auto":
         return choice
     if "auto" not in _cache:
-        if _ollama_up(lc):
+        if shutil.which("claude"):
+            _cache["auto"] = "claude"
+        elif _ollama_up(lc):
             _cache["auto"] = "ollama"
         elif lc.get("api_key"):
             _cache["auto"] = "openai"
-        elif shutil.which("claude"):
-            _cache["auto"] = "claude"
         else:
             _cache["auto"] = "none"
     return _cache["auto"]
@@ -55,7 +58,7 @@ def describe(cfg):
     return {
         "ollama": f"Ollama · {lc.get('ollama_model')}",
         "openai": f"{lc.get('model')}",
-        "claude": "Claude Code",
+        "claude": "Claude" + (f" · {lc['claude_model']}" if lc.get("claude_model") else ""),
         "none": "offline templates",
     }.get(p, p)
 
@@ -90,11 +93,17 @@ def chat(cfg, system, messages, json_mode=False):
             )
             if len(messages) > 1:
                 transcript += "\n\nReply as Jarvis to the last user message."
+            cmd = ["claude", "-p", "--output-format", "text", "--append-system-prompt", system]
+            if lc.get("claude_model"):
+                cmd += ["--model", lc["claude_model"]]
+            env = dict(os.environ)
+            if lc.get("use_subscription", True):
+                # An API key in the environment would bill the pay-per-use API instead of your plan.
+                env.pop("ANTHROPIC_API_KEY", None)
+                env.pop("ANTHROPIC_AUTH_TOKEN", None)
             # No tools are pre-approved, so in -p mode Claude can only talk, never act.
-            res = subprocess.run(
-                ["claude", "-p", "--output-format", "text", "--append-system-prompt", system],
-                input=transcript, capture_output=True, text=True, timeout=timeout, cwd=ROOT,
-            )
+            res = subprocess.run(cmd, input=transcript, capture_output=True, text=True,
+                                 timeout=timeout, cwd=ROOT, env=env)
             return res.stdout.strip() or None
     except (urllib.error.URLError, KeyError, IndexError, subprocess.SubprocessError, OSError, ValueError) as e:
         print(f"[jarvis] LLM ({p}) failed: {e}")
